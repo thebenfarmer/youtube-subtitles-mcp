@@ -1,0 +1,31 @@
+{
+  "name": "youtube-subtitles-mcp",
+  "version": "1.0.0",
+  "description": "YouTube Subtitles MCP Server for Claude Code",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "execa": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "keywords": [
+    "mcp",
+    "youtube",
+    "subtitles",
+    "claude"
+  ],
+  "author": "Custom YouTube MCP",
+  "license": "MIT"
+}
