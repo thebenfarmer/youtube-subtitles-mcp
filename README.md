@@ -1,131 +1,92 @@
 # YouTube Subtitles MCP Server
 
-Ein Model Context Protocol (MCP) Server für die Integration von YouTube-Untertiteln in Claude Code.
+MCP-Server, der Claude Code das vollständige Transkript eines YouTube-Videos liefert, gelesen aus dessen Untertiteln.
 
-## Features
+## Was er tut
 
-- **YouTube Subtitle Download**: Lädt Untertitel von YouTube-Videos in verschiedenen Sprachen herunter
-- **Video Information**: Extrahiert grundlegende Informationen über YouTube-Videos  
-- **VTT Parser**: Konvertiert VTT-Untertitel in lesbaren Text
-- **MCP Integration**: Vollständige Integration in Claude Code
+- **`get_youtube_subtitles`** holt die Untertitel und gibt den gesprochenen Text vollständig zurück. Nichts wird zusammengefasst, ausgedünnt oder als „doppelt" geraten weggelassen.
+- **`get_youtube_info`** liefert Titel, Beschreibung, Dauer, Kanal und Zahlen eines Videos.
+
+### Welche Untertitel er nimmt
+
+Ein einziger `yt-dlp`-Lauf je Video fragt die gewünschte Sprache und die automatischen Untertitel in der Originalsprache des Videos (`<sprache>-orig`) an. Ausgewählt wird in dieser Reihenfolge:
+
+1. von Hand erstellte Untertitel in der gewünschten Sprache
+2. automatische Untertitel in der gewünschten Sprache
+3. automatische Untertitel in der Originalsprache des Videos
+
+Die Antwort nennt Sprache und Art („manual subtitles" oder „automatic captions").
+
+Automatische Untertitel von YouTube wiederholen in jedem Abschnitt die vorige Zeile. Der Server übernimmt deshalb nur die Wörter, die YouTube mit eigenem Zeitstempel als neu markiert. Von Hand erstellte Untertitel bleiben Zeile für Zeile erhalten, auch Wiederholungen.
+
+### Lange Videos und Zwischenspeicher
+
+- Jedes Transkript landet als Textdatei in `~/.cache/youtube-subtitles-mcp/<video-id>.<sprache>.txt` (anderer Ort über `YOUTUBE_MCP_CACHE_DIR`). Die Zeilen sind höchstens 100 Zeichen lang, damit zeilenweise lesende Werkzeuge nichts abschneiden.
+- Die Antwort enthält den Text bis `maxLength` Zeichen (Standard 40.000) und immer den Pfad der Datei. Ist der Text länger, endet die Antwort mit `[TRUNCATED: showing X of Y characters. Read the rest from <pfad>]`.
+- Ein zweiter Abruf desselben Videos in derselben Sprache liest aus der Datei und fragt YouTube nicht erneut.
+- Dateien, die 90 Tage weder geschrieben noch gelesen wurden, löscht der Server beim nächsten Abruf. Der Ordner lässt sich jederzeit von Hand leeren.
+
+### Wenn YouTube ablehnt
+
+- **HTTP 429 (Too Many Requests):** Der Server hört nach dem ersten Fehlschlag auf, `yt-dlp` läuft mit `--retries 0`. Jeder weitere Versuch kann die Sperre verlängern. 429 kann eine Sperre des Anschlusses sein oder bedeuten, dass YouTube für dieses Video einen PO-Token verlangt. Unterscheiden lässt sich das, indem man ein anderes, älteres Video abruft.
+- **„Sign in to confirm you're not a bot":** YouTube hält den Anschluss für automatisiert, typisch für Server in Rechenzentren. Dort hilft nur `yt-dlp` mit Browser-Cookies.
+- `yt-dlp` hat ein Zeitlimit von 120 Sekunden.
+
+### Sicherheit
+
+Nur Adressen von `youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtube-nocookie.com` und `youtu.be` mit gültiger Video-ID werden angenommen. Die Adresse steht hinter `--`, damit `yt-dlp` sie nie als Option liest. Sprachcodes werden geprüft, bevor sie in den Aufruf gehen.
 
 ## Voraussetzungen
 
-- Node.js (v18 oder höher)
-- yt-dlp installiert und im PATH verfügbar
-- Claude Desktop App
-- ffmpeg (optional, aber empfohlen für bessere Kompatibilität)
+- Node.js 18 oder neuer
+- `yt-dlp` im `PATH`, **aktuell gehalten**. YouTube ändert seine Schnittstellen oft, ein `yt-dlp`, das älter als ein paar Monate ist, scheitert dann. `yt-dlp` warnt selbst ab 90 Tagen Alter.
+  ```bash
+  brew install yt-dlp     # einrichten
+  brew upgrade yt-dlp     # aktualisieren
+  ```
 
 ## Installation
 
-1. **yt-dlp installieren** (falls noch nicht vorhanden):
-   ```bash
-   brew install yt-dlp
-   # oder
-   pip install yt-dlp
-   ```
-
-2. **Projekt installieren**:
-   ```bash
-   cd youtube-mcp
-   npm install
-   npm run build
-   ```
-
-3. **ffmpeg installieren** (optional, aber empfohlen):
-   ```bash
-   # Option 1: System-ffmpeg installieren
-   brew install ffmpeg  # macOS
-   sudo apt install ffmpeg  # Ubuntu/Debian
-   
-   # Option 2: ffmpeg-static verwenden (automatisch gebundelt)
-   npm install ffmpeg-static
-   ```
-
-4. **Claude Desktop konfigurieren**:
-   Die Konfigurationsdatei `~/.config/claude-desktop/claude_desktop_config.json` wurde automatisch erstellt.
-
-## Verwendung
-
-### Verfügbare Tools
-
-#### `get_youtube_subtitles`
-Lädt Untertitel von einem YouTube-Video herunter.
-
-**Parameter:**
-- `url` (string, erforderlich): YouTube-Video URL
-- `language` (string, optional): Sprachcode (z.B. "en", "de", "fr"). Standard: "en"
-
-**Beispiel:**
-```
-Lade die deutschen Untertitel von diesem Video herunter: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-```
-
-#### `get_youtube_info`
-Extrahiert Informationen über ein YouTube-Video.
-
-**Parameter:**
-- `url` (string, erforderlich): YouTube-Video URL
-
-**Beispiel:**
-```
-Zeige mir die Informationen zu diesem Video: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-```
-
-### Nutzung mit Claude Code
-
-Nach der Installation können Sie direkt in Claude Code Befehle wie folgt verwenden:
-
-```
-Kannst du die Untertitel dieses YouTube-Videos analysieren: https://www.youtube.com/watch?v=7ITff1fIbSc
-```
-
-```
-Erstelle eine Zusammenfassung dieses Videos: https://www.youtube.com/watch?v=7ITff1fIbSc
-```
-
-## Entwicklung
-
-### Lokale Entwicklung
 ```bash
-npm run dev  # TypeScript im Watch-Modus
-```
-
-### Testen
-```bash
+npm install
 npm run build
-node dist/index.js
 ```
 
-## Fehlerbehebung
+Eintrag in der `.mcp.json` des Projekts, das den Server nutzt:
 
-### Häufige Probleme
+```json
+{
+  "mcpServers": {
+    "youtube-subtitles": {
+      "command": "node",
+      "args": ["/pfad/zu/youtube-mcp/dist/index.js"]
+    }
+  }
+}
+```
 
-1. **"yt-dlp not found"**
-   - Stellen Sie sicher, dass yt-dlp installiert und im PATH verfügbar ist
-   - Testen Sie mit: `yt-dlp --version`
+Nach einer Änderung am Server braucht Claude Code eine neue Session, um ihn neu zu laden.
 
-2. **"No subtitles found"**
-   - Nicht alle Videos haben Untertitel
-   - Versuchen Sie eine andere Sprache oder prüfen Sie, ob automatische Untertitel verfügbar sind
+## Parameter
 
-3. **"ERROR: Did not get any data blocks"**
-   - Dieser Fehler tritt oft auf, wenn ffmpeg nicht installiert ist
-   - Installieren Sie ffmpeg oder verwenden Sie `npm install ffmpeg-static`
-   - Der Server hat automatische Fallback-Strategien implementiert
+`get_youtube_subtitles`
 
-4. **MCP Server startet nicht**
-   - Überprüfen Sie die Konfiguration in `claude_desktop_config.json`
-   - Stellen Sie sicher, dass der Pfad zur `index.js` korrekt ist
+| Parameter | Pflicht | Standard | Bedeutung |
+|-----------|---------|----------|-----------|
+| `url` | ja | | YouTube-Adresse |
+| `language` | nein | `en` | gewünschte Sprache, z. B. `de`, `en-US` |
+| `maxLength` | nein | `40000` | höchstens so viele Zeichen in der Antwort, die Datei hält immer alles |
 
-### Erweiterte Fehlerbehandlung
+`get_youtube_info`: nur `url`.
 
-Der MCP Server verfügt über robuste Fehlerbehandlung:
-- **Automatische Fallback-Strategien**: Versucht verschiedene Parameter, falls ein Ansatz fehlschlägt
-- **ffmpeg-static Integration**: Verwendet automatisch gebundelte ffmpeg-Binaries, falls verfügbar
-- **Detaillierte Fehlermeldungen**: Gibt spezifische Hinweise zur Fehlerbehebung
-- **Cleanup**: Automatisches Aufräumen von temporären Dateien bei Fehlern
+## Tests
+
+```bash
+npm test
+```
+
+Baut den Server und prüft ihn ohne Netz. Die Server-Tests ersetzen `yt-dlp` durch ein Skript, das jeden Aufruf mitschreibt. So ist belegt, dass je Video genau ein Aufruf läuft, bei 429 kein zweiter folgt, ein Treffer im Zwischenspeicher gar keinen auslöst und eine Adresse wie `--exec=...` gar nicht erst bei `yt-dlp` ankommt.
 
 ## Lizenz
 
-MIT License
+MIT
