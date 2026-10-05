@@ -155,6 +155,13 @@ export function truncateText(text: string, maxLength: number): { text: string; t
   return { text: lastBreak > 0 ? cut.slice(0, lastBreak) : cut, truncated: true };
 }
 
+/** yt-dlp warns on stderr once it is older than 90 days; an outdated yt-dlp breaks when YouTube changes. */
+export function outdatedNotice(stderr: string): string | null {
+  const line = stderr.split('\n').find(l => /yt-dlp version .* is older than \d+ days/i.test(l));
+  if (!line) return null;
+  return `[NOTICE: ${line.replace(/^WARNING:\s*/, '').trim()} Update it (e.g. \`brew upgrade yt-dlp\`) before YouTube changes break it.]`;
+}
+
 export type FailureKind = 'rate-limited' | 'bot-check' | 'no-subtitles' | 'unavailable' | 'timeout' | 'unknown';
 
 export function classifyFailure(stderr: string, stdout: string, timedOut: boolean): FailureKind {

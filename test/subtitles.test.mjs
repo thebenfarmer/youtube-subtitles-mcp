@@ -5,6 +5,7 @@ import {
   classifyFailure,
   extractVideoId,
   isValidLanguage,
+  outdatedNotice,
   parseVtt,
   truncateText,
   wrapText,
@@ -118,4 +119,11 @@ test('classifyFailure recognises the yt-dlp messages seen in practice', () => {
   assert.equal(classifyFailure('ERROR: [youtube] x: Private video', '', false), 'unavailable');
   assert.equal(classifyFailure('', '', true), 'timeout');
   assert.equal(classifyFailure('something new', '', false), 'unknown');
+});
+
+test('outdatedNotice picks up the yt-dlp age warning only', () => {
+  const stderr = 'WARNING: Your yt-dlp version (2026.02.21) is older than 90 days!\n         It is strongly recommended to always use the latest version.';
+  assert.match(outdatedNotice(stderr), /^\[NOTICE: Your yt-dlp version \(2026\.02\.21\) is older than 90 days! Update it/);
+  assert.equal(outdatedNotice('WARNING: [youtube] Some formats have been skipped'), null);
+  assert.equal(outdatedNotice(''), null);
 });

@@ -31,6 +31,7 @@ Automatische Untertitel von YouTube wiederholen in jedem Abschnitt die vorige Ze
 - **HTTP 429 (Too Many Requests):** Der Server hört nach dem ersten Fehlschlag auf, `yt-dlp` läuft mit `--retries 0`. Jeder weitere Versuch kann die Sperre verlängern. 429 kann eine Sperre des Anschlusses sein oder bedeuten, dass YouTube für dieses Video einen PO-Token verlangt. Unterscheiden lässt sich das, indem man ein anderes, älteres Video abruft.
 - **„Sign in to confirm you're not a bot":** YouTube hält den Anschluss für automatisiert, typisch für Server in Rechenzentren. Dort hilft nur `yt-dlp` mit Browser-Cookies.
 - `yt-dlp` hat ein Zeitlimit von 120 Sekunden.
+- **`yt-dlp` veraltet:** Meldet `yt-dlp`, dass es älter als 90 Tage ist, hängt der Server einen `[NOTICE: ...]` mit dem Update-Befehl an seine Antwort – bei Erfolg wie bei Fehlern. Abrufe aus dem Zwischenspeicher starten `yt-dlp` nicht und melden deshalb nichts.
 
 ### Sicherheit
 

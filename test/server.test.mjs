@@ -17,6 +17,7 @@ const args = process.argv.slice(2);
 fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify(args) + '\\n');
 const out = args[args.indexOf('--output') + 1];
 const write = (lang, content) => fs.writeFileSync(out.replace('%(ext)s', lang + '.vtt'), content);
+if (process.env.FAKE_OLD) console.error('WARNING: Your yt-dlp version (2026.02.21) is older than 90 days!');
 const mode = process.env.FAKE_MODE;
 if (mode === 'manual') write('en', process.env.FAKE_VTT);
 if (mode === 'original-only') write('de-orig', process.env.FAKE_VTT);
@@ -137,4 +138,22 @@ test('falls back to the original-language captions', async () => {
   const result = await callTool(env, 'get_youtube_subtitles', { url: VIDEO });
   assert.match(result.content[0].text, /^YouTube transcript \(de, automatic captions\)/);
   assert.match(result.content[0].text, /deutsche originalworte/);
+});
+
+test('passes on the yt-dlp age warning, on success and on failure', async () => {
+  const ok = await setup('manual', { FAKE_VTT: manualVtt(), FAKE_OLD: '1' });
+  const success = await callTool(ok.env, 'get_youtube_subtitles', { url: VIDEO });
+  assert.ok(!success.isError);
+  assert.match(success.content[0].text, /\[NOTICE: Your yt-dlp version \(2026\.02\.21\) is older than 90 days! Update it/);
+
+  const blocked = await setup('429', { FAKE_OLD: '1' });
+  const failure = await callTool(blocked.env, 'get_youtube_subtitles', { url: VIDEO });
+  assert.equal(failure.isError, true);
+  assert.match(failure.content[0].text, /HTTP 429[\s\S]*\[NOTICE: .*older than 90 days/);
+});
+
+test('stays quiet about the age when yt-dlp is current', async () => {
+  const { env } = await setup('manual', { FAKE_VTT: manualVtt() });
+  const result = await callTool(env, 'get_youtube_subtitles', { url: VIDEO });
+  assert.doesNotMatch(result.content[0].text, /NOTICE/);
 });

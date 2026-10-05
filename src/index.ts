@@ -21,6 +21,7 @@ import {
   describeFailure,
   extractVideoId,
   isValidLanguage,
+  outdatedNotice,
   truncateText,
   wrapText,
 } from './subtitles.js';
@@ -31,8 +32,9 @@ const DEFAULT_MAX_LENGTH = 40000;
 // Retries are disabled on purpose: on HTTP 429 every further request extends the block.
 const YT_DLP_BASE_ARGS = ['--no-playlist', '--retries', '0', '--extractor-retries', '0'];
 
-function errorResult(message: string): CallToolResult {
-  return { content: [{ type: 'text', text: `Error: ${message}` }], isError: true };
+function errorResult(message: string, notice: string | null = null): CallToolResult {
+  const text = `Error: ${message}${notice ? `\n\n${notice}` : ''}`;
+  return { content: [{ type: 'text', text }], isError: true };
 }
 
 class YouTubeSubtitlesMCPServer {
@@ -175,6 +177,7 @@ class YouTubeSubtitlesMCPServer {
         '--',
         url,
       ], { reject: false, timeout: YT_DLP_TIMEOUT_SECONDS * 1000 });
+      const notice = outdatedNotice(result.stderr);
 
       const files = (await fs.readdir(tempDir)).filter(f => f.endsWith('.vtt'));
       const candidates = await Promise.all(files.map(async file => ({
@@ -190,7 +193,7 @@ class YouTubeSubtitlesMCPServer {
           language,
           timeoutSeconds: YT_DLP_TIMEOUT_SECONDS,
           stderr: result.stderr,
-        }));
+        }), notice);
       }
 
       const path = await writeTranscript(this.cacheDir, language, {
@@ -199,7 +202,7 @@ class YouTubeSubtitlesMCPServer {
         label: chosen.label,
         text: chosen.text,
       });
-      return this.formatTranscript(path, chosen.language, chosen.label, wrapText(chosen.text), maxLength, false);
+      return this.formatTranscript(path, chosen.language, chosen.label, wrapText(chosen.text), maxLength, false, notice);
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
@@ -212,6 +215,7 @@ class YouTubeSubtitlesMCPServer {
     text: string,
     maxLength: number,
     fromCache: boolean,
+    notice: string | null = null,
   ): CallToolResult {
     const shown = truncateText(text, maxLength);
     const header = [
@@ -221,7 +225,8 @@ class YouTubeSubtitlesMCPServer {
     const footer = shown.truncated
       ? `\n\n[TRUNCATED: showing ${shown.text.length} of ${text.length} characters. Read the rest from ${path}]`
       : '';
-    return { content: [{ type: 'text', text: `${header}\n\n${shown.text}${footer}` }] };
+    const ending = notice ? `\n\n${notice}` : '';
+    return { content: [{ type: 'text', text: `${header}\n\n${shown.text}${footer}${ending}` }] };
   }
 
   private async getYouTubeInfo(url: string): Promise<CallToolResult> {
@@ -233,9 +238,10 @@ class YouTubeSubtitlesMCPServer {
       reject: false,
       timeout: YT_DLP_TIMEOUT_SECONDS * 1000,
     });
+    const notice = outdatedNotice(result.stderr);
     if (result.exitCode !== 0 || result.timedOut) {
       const kind = classifyFailure(result.stderr, result.stdout, Boolean(result.timedOut));
-      return errorResult(describeFailure(kind, { timeoutSeconds: YT_DLP_TIMEOUT_SECONDS, stderr: result.stderr }));
+      return errorResult(describeFailure(kind, { timeoutSeconds: YT_DLP_TIMEOUT_SECONDS, stderr: result.stderr }), notice);
     }
 
     const info = JSON.parse(result.stdout);
@@ -250,7 +256,8 @@ class YouTubeSubtitlesMCPServer {
       channel: info.channel,
       thumbnail: info.thumbnail,
     };
-    return { content: [{ type: 'text', text: `Video Information:\n${JSON.stringify(videoInfo, null, 2)}` }] };
+    const text = `Video Information:\n${JSON.stringify(videoInfo, null, 2)}${notice ? `\n\n${notice}` : ''}`;
+    return { content: [{ type: 'text', text }] };
   }
 
   async run(): Promise<void> {
