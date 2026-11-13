@@ -1,49 +1,49 @@
 # YouTube Subtitles MCP Server
 
-MCP-Server, der Claude Code das vollständige Transkript eines YouTube-Videos liefert, gelesen aus dessen Untertiteln.
+MCP server that gives Claude Code the full transcript of a YouTube video, read from its subtitles.
 
-## Was er tut
+## What it does
 
-- **`get_youtube_subtitles`** holt die Untertitel und gibt den gesprochenen Text vollständig zurück. Nichts wird zusammengefasst, ausgedünnt oder als „doppelt" geraten weggelassen.
-- **`get_youtube_info`** liefert Titel, Beschreibung, Dauer, Kanal und Zahlen eines Videos.
+- **`get_youtube_subtitles`** fetches the subtitles and returns the spoken text in full. Nothing is summarized, thinned out, or dropped on the guess that it is a "duplicate".
+- **`get_youtube_info`** returns title, description, duration, channel and statistics of a video.
 
-### Welche Untertitel er nimmt
+### Which subtitles it picks
 
-Ein einziger `yt-dlp`-Lauf je Video fragt die gewünschte Sprache und die automatischen Untertitel in der Originalsprache des Videos (`<sprache>-orig`) an. Ausgewählt wird in dieser Reihenfolge:
+A single `yt-dlp` run per video requests the desired language and the automatic captions in the video's original language (`<language>-orig`). The choice is made in this order:
 
-1. von Hand erstellte Untertitel in der gewünschten Sprache
-2. automatische Untertitel in der gewünschten Sprache
-3. automatische Untertitel in der Originalsprache des Videos
+1. manually created subtitles in the desired language
+2. automatic captions in the desired language
+3. automatic captions in the video's original language
 
-Die Antwort nennt Sprache und Art („manual subtitles" oder „automatic captions").
+The response names the language and the kind ("manual subtitles" or "automatic captions").
 
-Automatische Untertitel von YouTube wiederholen in jedem Abschnitt die vorige Zeile. Der Server übernimmt deshalb nur die Wörter, die YouTube mit eigenem Zeitstempel als neu markiert. Von Hand erstellte Untertitel bleiben Zeile für Zeile erhalten, auch Wiederholungen.
+YouTube's automatic captions repeat the previous line in every segment. The server therefore keeps only the words that YouTube marks as new with their own timestamp. Manually created subtitles are kept line by line, repetitions included.
 
-### Lange Videos und Zwischenspeicher
+### Long videos and cache
 
-- Jedes Transkript landet als Textdatei in `~/.cache/youtube-subtitles-mcp/<video-id>.<sprache>.txt` (anderer Ort über `YOUTUBE_MCP_CACHE_DIR`). Die Zeilen sind höchstens 100 Zeichen lang, damit zeilenweise lesende Werkzeuge nichts abschneiden.
-- Die Antwort enthält den Text bis `maxLength` Zeichen (Standard 40.000) und immer den Pfad der Datei. Ist der Text länger, endet die Antwort mit `[TRUNCATED: showing X of Y characters. Read the rest from <pfad>]`.
-- Ein zweiter Abruf desselben Videos in derselben Sprache liest aus der Datei und fragt YouTube nicht erneut.
-- Dateien, die 90 Tage weder geschrieben noch gelesen wurden, löscht der Server beim nächsten Abruf. Der Ordner lässt sich jederzeit von Hand leeren.
+- Every transcript is saved as a text file at `~/.cache/youtube-subtitles-mcp/<video-id>.<language>.txt` (use `YOUTUBE_MCP_CACHE_DIR` for another location). Lines are at most 100 characters long so that tools reading line by line do not cut anything off.
+- The response contains the text up to `maxLength` characters (default 40,000) and always the path of the file. If the text is longer, the response ends with `[TRUNCATED: showing X of Y characters. Read the rest from <path>]`.
+- A second request for the same video in the same language reads from the file and does not ask YouTube again.
+- Files that have been neither written nor read for 90 days are deleted by the server on the next request. The folder can be emptied by hand at any time.
 
-### Wenn YouTube ablehnt
+### When YouTube refuses
 
-- **HTTP 429 (Too Many Requests):** Der Server hört nach dem ersten Fehlschlag auf, `yt-dlp` läuft mit `--retries 0`. Jeder weitere Versuch kann die Sperre verlängern. 429 kann eine Sperre des Anschlusses sein oder bedeuten, dass YouTube für dieses Video einen PO-Token verlangt. Unterscheiden lässt sich das, indem man ein anderes, älteres Video abruft.
-- **„Sign in to confirm you're not a bot":** YouTube hält den Anschluss für automatisiert, typisch für Server in Rechenzentren. Dort hilft nur `yt-dlp` mit Browser-Cookies.
-- `yt-dlp` hat ein Zeitlimit von 120 Sekunden.
-- **`yt-dlp` veraltet:** Meldet `yt-dlp`, dass es älter als 90 Tage ist, hängt der Server einen `[NOTICE: ...]` mit dem Update-Befehl an seine Antwort – bei Erfolg wie bei Fehlern. Abrufe aus dem Zwischenspeicher starten `yt-dlp` nicht und melden deshalb nichts.
+- **HTTP 429 (Too Many Requests):** The server stops after the first failure; `yt-dlp` runs with `--retries 0`. Every further attempt can extend the block. 429 can be a block of the connection or mean that YouTube requires a PO token for this video. You can tell the two apart by requesting a different, older video.
+- **"Sign in to confirm you're not a bot":** YouTube considers the connection automated, typical for servers in data centers. Only `yt-dlp` with browser cookies helps there.
+- `yt-dlp` has a timeout of 120 seconds.
+- **Outdated `yt-dlp`:** If `yt-dlp` reports that it is older than 90 days, the server appends a `[NOTICE: ...]` with the update command to its response, on success as well as on errors. Requests served from the cache do not start `yt-dlp` and therefore report nothing.
 
-### Sicherheit
+### Security
 
-Nur Adressen von `youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtube-nocookie.com` und `youtu.be` mit gültiger Video-ID werden angenommen. Die Adresse steht hinter `--`, damit `yt-dlp` sie nie als Option liest. Sprachcodes werden geprüft, bevor sie in den Aufruf gehen.
+Only URLs from `youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtube-nocookie.com` and `youtu.be` with a valid video ID are accepted. The URL is placed after `--` so that `yt-dlp` never reads it as an option. Language codes are validated before they go into the call.
 
-## Voraussetzungen
+## Requirements
 
-- Node.js 18 oder neuer
-- `yt-dlp` im `PATH`, **aktuell gehalten**. YouTube ändert seine Schnittstellen oft, ein `yt-dlp`, das älter als ein paar Monate ist, scheitert dann. `yt-dlp` warnt selbst ab 90 Tagen Alter.
+- Node.js 18 or newer
+- `yt-dlp` in the `PATH`, **kept up to date**. YouTube changes its interfaces often, and a `yt-dlp` older than a few months then fails. `yt-dlp` itself warns from an age of 90 days.
   ```bash
-  brew install yt-dlp     # einrichten
-  brew upgrade yt-dlp     # aktualisieren
+  brew install yt-dlp     # set up
+  brew upgrade yt-dlp     # update
   ```
 
 ## Installation
@@ -53,32 +53,32 @@ npm install
 npm run build
 ```
 
-Eintrag in der `.mcp.json` des Projekts, das den Server nutzt:
+Entry in the `.mcp.json` of the project that uses the server:
 
 ```json
 {
   "mcpServers": {
     "youtube-subtitles": {
       "command": "node",
-      "args": ["/pfad/zu/youtube-mcp/dist/index.js"]
+      "args": ["/path/to/youtube-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-Nach einer Änderung am Server braucht Claude Code eine neue Session, um ihn neu zu laden.
+After a change to the server, Claude Code needs a new session to reload it.
 
-## Parameter
+## Parameters
 
 `get_youtube_subtitles`
 
-| Parameter | Pflicht | Standard | Bedeutung |
-|-----------|---------|----------|-----------|
-| `url` | ja | | YouTube-Adresse |
-| `language` | nein | `en` | gewünschte Sprache, z. B. `de`, `en-US` |
-| `maxLength` | nein | `40000` | höchstens so viele Zeichen in der Antwort, die Datei hält immer alles |
+| Parameter | Required | Default | Meaning |
+|-----------|----------|---------|---------|
+| `url` | yes | | YouTube URL |
+| `language` | no | `en` | desired language, e.g. `de`, `en-US` |
+| `maxLength` | no | `40000` | maximum number of characters in the response; the file always holds everything |
 
-`get_youtube_info`: nur `url`.
+`get_youtube_info`: `url` only.
 
 ## Tests
 
@@ -86,8 +86,8 @@ Nach einer Änderung am Server braucht Claude Code eine neue Session, um ihn neu
 npm test
 ```
 
-Baut den Server und prüft ihn ohne Netz. Die Server-Tests ersetzen `yt-dlp` durch ein Skript, das jeden Aufruf mitschreibt. So ist belegt, dass je Video genau ein Aufruf läuft, bei 429 kein zweiter folgt, ein Treffer im Zwischenspeicher gar keinen auslöst und eine Adresse wie `--exec=...` gar nicht erst bei `yt-dlp` ankommt.
+Builds the server and tests it without network. The server tests replace `yt-dlp` with a script that logs every call. This proves that exactly one call runs per video, that no second one follows after a 429, that a cache hit triggers none at all, and that a URL like `--exec=...` never even reaches `yt-dlp`.
 
-## Lizenz
+## License
 
 MIT
